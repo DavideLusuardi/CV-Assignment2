@@ -8,7 +8,7 @@ import os
 from numpy.lib.type_check import imag
 
 
-def detect(args, image, net, LABELS, COLORS):
+def detect(args, image, net, LABELS):
 	(H, W) = image.shape[:2]
 
 	# determine only the *output* layer names that we need from YOLO
@@ -18,7 +18,9 @@ def detect(args, image, net, LABELS, COLORS):
 	# construct a blob from the input image and then perform a forward
 	# pass of the YOLO object detector, giving us our bounding boxes and
 	# associated probabilities
-	blob = cv2.dnn.blobFromImage(image, 1 / 255.0, (416, 416),
+	size = (416, 416) # original one
+	size = (512, 512)
+	blob = cv2.dnn.blobFromImage(image, 1 / 255.0, size,
 		swapRB=True, crop=False)
 	net.setInput(blob)
 	start = time.time()
@@ -70,20 +72,20 @@ def detect(args, image, net, LABELS, COLORS):
 	idxs = cv2.dnn.NMSBoxes(boxes, confidences, args["confidence"],
 		args["threshold"])
 
-	# ensure at least one detection exists
-	if len(idxs) > 0:
-		# loop over the indexes we are keeping
-		for i in idxs.flatten():
-			# extract the bounding box coordinates
-			(x, y) = (boxes[i][0], boxes[i][1])
-			(w, h) = (boxes[i][2], boxes[i][3])
+	objects = [(boxes[i], classIDs[i], LABELS[classIDs[i]], confidences[i]) for i in idxs.flatten()]
+	return objects
 
-			# draw a bounding box rectangle and label on the image
-			color = [int(c) for c in COLORS[classIDs[i]]]
-			cv2.rectangle(image, (x, y), (x + w, y + h), color, 2)
-			text = "{}: {:.4f}".format(LABELS[classIDs[i]], confidences[i])
-			cv2.putText(image, text, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX,
-				0.5, color, 2)
+def draw_labels(image, objects, COLORS):
+	for box, classID, label, confidence in objects:
+		(x, y) = (box[0], box[1])
+		(w, h) = (box[2], box[3])
+
+		# draw a bounding box rectangle and label on the image
+		color = [int(c) for c in COLORS[classID]]
+		cv2.rectangle(image, (x, y), (x + w, y + h), color, 2)
+		text = "{}: {:.4f}".format(label, confidence)
+		cv2.putText(image, text, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX,
+			0.5, color, 2)
 
 	return image
 
@@ -114,7 +116,8 @@ def process_video(args, net, LABELS, COLORS):
         # Capture frame-by-frame
         ret, frame = cap.read()
 
-        frame = detect(args, frame, net, LABELS, COLORS)
+        objects = detect(args, frame, net, LABELS)
+        frame = draw_labels(frame, objects, COLORS)
 
         # show the output image
         cv2.imshow("Image", frame)
@@ -124,7 +127,8 @@ def process_video(args, net, LABELS, COLORS):
             break
 
 def process_image(args, image, net, LABELS, COLORS):
-	image = detect(args, image, net, LABELS, COLORS)
+	objects = detect(args, image, net, LABELS)
+	image = draw_labels(image, objects, COLORS)
 
 	# show the output image
 	cv2.imshow("Image", image)
@@ -151,7 +155,7 @@ if __name__ == '__main__':
 		help="base path to YOLO directory")
 	ap.add_argument("-c", "--confidence", type=float, default=0.3,
 		help="minimum probability to filter weak detections")
-	ap.add_argument("-t", "--threshold", type=float, default=0.3,
+	ap.add_argument("-t", "--threshold", type=float, default=0.2,
 		help="threshold when applying non-maxima suppression")
 	args = vars(ap.parse_args())
 
