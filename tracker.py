@@ -23,6 +23,29 @@ def get_box(mask_points):
     # w, h = 1220, 287
     return x_min, y_min, x_max-x_min, y_max-y_min
 
+
+PERSON_CLASS_ID = 0
+def filter_objects(objects, mask_box):
+    boxes = list()
+    remaining = list()
+    for object in objects:
+        box, classID, label, confidence = object
+        (x, y) = (box[0], box[1])
+        (w, h) = (box[2], box[3])
+
+        # print(f"w {w}, h {h}, label {label}")
+
+        if classID == PERSON_CLASS_ID and \
+                w < 60 and h < 150 and \
+                x > mask_box[0] and x < mask_box[0]+mask_box[2] and y > mask_box[1] and y < mask_box[1]+mask_box[3]:
+            boxes.append(object)
+        else:
+            remaining.append(object)
+
+    return boxes, remaining
+
+
+
 args = {'yolo':'../utility/yolo', 'confidence':0.3, 'threshold':0.1}
 net, LABELS, COLORS = yolo.load_data(args)
 
@@ -123,19 +146,26 @@ for i in range(1000):
     #     cv2.rectangle(frame_masked, (xA, yA), (xB, yB),
     #                       (255, 255, 255), 2)
     
-    frame_masked = yolo.detect(args, frame, net, LABELS, COLORS)
+    objects = yolo.detect(args, frame, net, LABELS)
+    objects, discards = filter_objects(objects, (x,y,w,h))
+    frame_masked = yolo.draw_labels(frame.copy(), objects, COLORS)
+    # discards_frame = yolo.draw_labels(frame.copy(), discards, COLORS)
 
     # Show keypoints
     # cv2.imshow('Blobs',blobs)
     # Display the resulting frame
     # cv2.imshow('frame',frame_gray)
     cv2.imshow('frame masked',frame_masked)
+    # cv2.imshow('discards',discards_frame)
     cv2.imshow('motion_mask',motion_mask)
     # cv2.imshow('Background',background)
     
-    k = cv2.waitKey(50)
-    if k == ord('q'): #close video is q is pressed
+    k = cv2.waitKey(100)
+    if k == ord('q'): #close video if q is pressed
         break
     elif k == ord('s'):
         # frame = cv2.bitwise_and(frame, frame, mask=motion_mask)
         cv2.imwrite(f'../material/frames/image-{i}.png', frame)
+        print(f'image saved: ../material/frames/image-{i}.png')
+    elif k == ord(' '):
+        cv2.waitKey(0)
