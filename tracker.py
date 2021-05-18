@@ -1,7 +1,9 @@
 import numpy as np
 import cv2
 import random, sys
-sys.path.insert(1, '../utility')
+
+root_dir = '.'
+sys.path.insert(1, f'{root_dir}/utility')
 import morphological_op as dl
 import yolo
 
@@ -46,8 +48,9 @@ def filter_objects(objects, mask_box):
 
 
 
-args = {'yolo':'../utility/yolo', 'confidence':0.3, 'threshold':0.1}
+args = {'yolo':f'{root_dir}/utility/yolo', 'confidence':0.3, 'threshold':0.1}
 net, LABELS, COLORS = yolo.load_data(args)
+RED = (0,0,255)
 
 # initialize the HOG descriptor/person detector
 hog = cv2.HOGDescriptor()
@@ -55,9 +58,9 @@ hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
 
 cv2.startWindowThread()
 
-cap = cv2.VideoCapture("../material/CV_basket.mp4")
+cap = cv2.VideoCapture(f"{root_dir}/material/CV_basket.mp4")
 
-background = cv2.imread('../material/background.png', cv2.IMREAD_GRAYSCALE)
+background = cv2.imread(f'{root_dir}/material/background.png', cv2.IMREAD_GRAYSCALE)
 
 mask_points = np.array([(87, 660), (298, 708), (494, 732), (709, 740), (902, 728), (1114, 696), (1307, 646), (1243, 540), (1084, 458), (996, 531), (696, 539), (389, 534), (313, 453), (131, 542)], np.int32)
 x,y,w,h = get_box(mask_points)
@@ -148,8 +151,8 @@ for i in range(1000):
     
     objects = yolo.detect(args, frame, net, LABELS)
     objects, discards = filter_objects(objects, (x,y,w,h))
-    frame_masked = yolo.draw_labels(frame.copy(), objects, COLORS)
-    # discards_frame = yolo.draw_labels(frame.copy(), discards, COLORS)
+    frame_masked = yolo.draw_labels(frame, objects, [RED])
+    frame_masked = yolo.draw_labels(frame, discards, COLORS)
 
     # Show keypoints
     # cv2.imshow('Blobs',blobs)
@@ -165,7 +168,7 @@ for i in range(1000):
         break
     elif k == ord('s'):
         # frame = cv2.bitwise_and(frame, frame, mask=motion_mask)
-        cv2.imwrite(f'../material/frames/image-{i}.png', frame)
-        print(f'image saved: ../material/frames/image-{i}.png')
+        cv2.imwrite(f'{root_dir}/material/frames/image-{i}.png', frame)
+        print(f'image saved: {root_dir}/material/frames/image-{i}.png')
     elif k == ord(' '):
         cv2.waitKey(0)
