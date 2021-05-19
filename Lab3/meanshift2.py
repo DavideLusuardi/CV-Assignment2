@@ -10,9 +10,10 @@ def update_hist(roi_hist, hsv_roi):
     new_hist = cv.calcHist([hsv_roi],[0],mask,[180],[0,180])
     cv.normalize(new_hist,new_hist,0,255,cv.NORM_MINMAX)
     
-    alpha = 0.3
+    alpha = 0.8
     beta = (1.0 - alpha)
     hist = cv.addWeighted(roi_hist, alpha, new_hist, beta, 0.0)
+    # cv.normalize(hist,hist,0,255,cv.NORM_MINMAX)
     return hist
 
 
@@ -36,8 +37,8 @@ upper_bound2 = np.array((180., 255., 130.))
 roi = frame[y:y+h, x:x+w]
 hsv_roi =  cv.cvtColor(roi, cv.COLOR_BGR2HSV)
 mask = cv.inRange(hsv_roi, lower_bound, upper_bound)
-mask2 = cv.inRange(hsv_roi, lower_bound2, upper_bound2)
-mask = cv.bitwise_or(mask, mask2)
+# mask2 = cv.inRange(hsv_roi, lower_bound2, upper_bound2)
+# mask = cv.bitwise_or(mask, mask2)
 # roi_hist = cv.calcHist([hsv_roi],[0],None,[180],[0,180])
 roi_hist = cv.calcHist([hsv_roi],[0],mask,[180],[0,180]) # TODO: provare con altri channels
 cv.normalize(roi_hist,roi_hist,0,255,cv.NORM_MINMAX)
@@ -49,6 +50,11 @@ while(1):
     if ret == True:
         hsv = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
         dst = cv.calcBackProject([hsv],[0],roi_hist,[0,180],1)
+
+        # ch = (0, 0)
+        # hue = np.empty(hsv.shape, hsv.dtype)
+        # cv.mixChannels([hsv], [hue], ch)
+        # dst = cv.calcBackProject([hue],[0],roi_hist,[0,180],1)
         
         # apply meanshift to get the new location
         ret, track_window = cv.meanShift(dst, track_window, term_crit)
@@ -57,10 +63,20 @@ while(1):
         # TODO: update histogram
         roi_hist = update_hist(roi_hist, hsv[y:y+h, x:x+w])
         
+        bins = 180
+        width = 400
+        height = 400
+        bin_w = int(round(width / bins))
+        histImg = np.zeros((height, width, 3), dtype=np.uint8)
+        for i in range(bins):
+            cv.rectangle(histImg, (i*bin_w, height), ( (i+1)*bin_w, height - int(np.round(roi_hist[i]*h/255.0 )) ), (0, 0, 255), cv.FILLED)
+        cv.imshow('Histogram', histImg)
+
         # Draw it on image
         img2 = cv.rectangle(frame, (x,y), (x+w,y+h), 255,2)
 
         cv.imshow('img2',img2)
+        cv.imshow('backprop',dst)
         # cv.imshow('hsv', hsv)
         k = cv.waitKey(30) & 0xff
         if k == ord('q'):
@@ -68,5 +84,9 @@ while(1):
         elif k == ord('p'):
             plt.plot(roi_hist)
             plt.show()
+        elif k == ord(' '):
+            while cv.waitKey(0) != ord(' '):
+                continue
+        
     else:
         break

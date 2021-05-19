@@ -4,6 +4,11 @@ import argparse
 import numpy as np
 
 
+lower_bound = (107, 81, 0)
+upper_bound = (120, 150, 255)
+lower_bound = (107, 81, 117)
+upper_bound = (120, 150, 246)
+
 def get_box(mask_points):
     x_min = min(mask_points, key=lambda e: e[0])[0]
     y_min = min(mask_points, key=lambda e: e[1])[1]
@@ -23,9 +28,11 @@ max_value_H = 360//2
 low_H = 0
 low_S = 0
 low_V = 0
+low_H, low_S, low_V = lower_bound
 high_H = max_value_H
 high_S = max_value
 high_V = max_value
+high_H, high_S, high_V = upper_bound
 window_capture_name = 'Video Capture'
 window_detection_name = 'Object Detection'
 low_H_name = 'Low H'
@@ -114,18 +121,18 @@ cv.createTrackbar(high_V_name, window_detection_name , high_V, max_value, on_hig
 cap = cv.VideoCapture('../material/CV_basket.mp4')
 ## [cap]
 
-img = cv.imread('../material/court_right.png')
-img = img[y:y+h, x:x+w]
-img_HSV = cv.cvtColor(img, cv.COLOR_BGR2HSV)
-img_threshold = cv.inRange(img_HSV, (low_H, low_S, low_V), (high_H, high_S, high_V))
-cv.imshow(window_capture_name, img)
-cv.imshow(window_detection_name, img_threshold)
+# img = cv.imread('../material/court_right.png')
+# img = img[y:y+h, x:x+w]
+# img_HSV = cv.cvtColor(img, cv.COLOR_BGR2HSV)
+# img_threshold = cv.inRange(img_HSV, (low_H, low_S, low_V), (high_H, high_S, high_V))
+# cv.imshow(window_capture_name, img)
+# cv.imshow(window_detection_name, img_threshold)
 
-key = None
-while key != ord('q'):
-    key = cv.waitKey(0)
-import sys
-sys.exit(0)
+# key = None
+# while key != ord('q'):
+#     key = cv.waitKey(0)
+# import sys
+# sys.exit(0)
 
 while True:
     ## [while]
@@ -134,8 +141,8 @@ while True:
         break
     frame = frame[y:y+h, x:x+w]
 
-    frame_HSV = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
-    frame_threshold = cv.inRange(frame_HSV, (low_H, low_S, low_V), (high_H, high_S, high_V))
+    img_HSV = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
+    frame_threshold = cv.inRange(img_HSV, (low_H, low_S, low_V), (high_H, high_S, high_V))
     ## [while]
 
     ## [show]
@@ -147,4 +154,5 @@ while True:
     if key == ord('q') or key == 27:
         break
     elif key == ord(' '):
-        cv.waitKey(0)
+        while cv.waitKey(0) != ord(' '):
+            continue

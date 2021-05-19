@@ -105,6 +105,11 @@ dilatation_size = 2
 element = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * dilatation_size + 1, 2 * dilatation_size + 1),
                                     (dilatation_size, dilatation_size))
 
+lower_bound = np.array((107., 81., 117.))
+upper_bound = np.array((120., 150., 246.))
+lower_bound2 = np.array((0., 0., 0.))
+upper_bound2 = np.array((180., 255., 130.))
+
 skip = random.randint(0, 500)
 for i in range(1000):
     # Capture frame-by-frame
@@ -121,11 +126,6 @@ for i in range(1000):
     diff = cv2.absdiff(background, frame_gray)
     #mask thresholding
     ret2, motion_mask = cv2.threshold(diff,50,255,cv2.THRESH_BINARY)
-    cv2.imshow('motion_mask1',motion_mask)
-    # ret2, motion_mask = cv2.threshold(diff,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-    # cv2.imshow('motion_mask2',motion_mask)
-    # motion_mask = cv2.adaptiveThreshold(diff,255,cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY,11,2)
-    # cv2.imshow('motion_mask2',motion_mask)
 
     # dl.src = motion_mask.copy()[450:750, 0:]
     # dl.dilatation(None)
@@ -135,6 +135,15 @@ for i in range(1000):
     
     # motion_mask = cv2.erode(motion_mask, None, iterations=1)
     motion_mask = cv2.dilate(motion_mask, element, iterations=1)
+    
+    hsv_roi =  cv2.cvtColor(frame_cut, cv2.COLOR_BGR2HSV)
+    referee_mask = cv2.inRange(hsv_roi, lower_bound, upper_bound)
+    # color_mask2 = cv2.inRange(hsv_roi, lower_bound2, upper_bound2)
+    # referee_mask = cv2.bitwise_or(color_mask, color_mask2)
+
+    referee_mask = cv2.dilate(referee_mask, element, iterations=1)
+
+    joint_mask = cv2.bitwise_and(referee_mask, motion_mask)
 
     # # Detect blobs.
     # reversemask=255-motion_mask
@@ -144,7 +153,7 @@ for i in range(1000):
     # blobs = cv2.drawKeypoints(frame_gray, keypoints, blank, (0,0,255)) # , cv2.DRAW_MATCHES_FLAGS_DEFAULT
 
     frame_masked = cv2.bitwise_and(frame_cut, frame_cut, mask=motion_mask)
-    cv2.imshow('motion', frame_masked)
+
 
     # boxes, weights = hog.detectMultiScale(frame_masked, winStride=(8,8) )
     # boxes = np.array([[x, y, x + w, y + h] for (x, y, w, h) in boxes])
@@ -154,17 +163,22 @@ for i in range(1000):
     #     cv2.rectangle(frame_masked, (xA, yA), (xB, yB),
     #                       (255, 255, 255), 2)
     
-    objects = yolo.detect(args, frame, net, LABELS)
-    objects, discards = filter_objects(objects, (x,y,w,h))
-    frame_masked = yolo.draw_labels(frame, objects, [RED])
-    frame_masked = yolo.draw_labels(frame, discards, COLORS)
+    # objects = yolo.detect(args, frame, net, LABELS)
+    # objects, discards = filter_objects(objects, (x,y,w,h))
+    # frame_masked = yolo.draw_labels(frame, objects, [RED])
+    # frame_masked = yolo.draw_labels(frame, discards, COLORS)
 
     # Show keypoints
     # cv2.imshow('Blobs',blobs)
     # Display the resulting frame
     # cv2.imshow('frame',frame_gray)
     cv2.imshow('frame masked',frame_masked)
-    # cv2.imshow('discards',discards_frame)    
+    # cv2.imshow('discards',discards_frame)
+    cv2.imshow('motion_mask',motion_mask)
+    cv2.imshow('referee_mask',referee_mask)
+    cv2.imshow('joint_mask',joint_mask)
+    # cv2.imshow('color_mask',color_mask)
+    # cv2.imshow('color_mask2',color_mask2)
     # cv2.imshow('Background',background)
     
     k = cv2.waitKey(100)
