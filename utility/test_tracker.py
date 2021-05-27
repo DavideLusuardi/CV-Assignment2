@@ -59,7 +59,7 @@ model = torch.hub.load('ultralytics/yolov5', 'yolov5s')
 # model = torch.hub.load('ultralytics/yolov5', 'yolov5x')
 model.classes = [0] # filter for person
 
-cap = cv2.VideoCapture('CV-Assignment2/material/CV_basket.mp4')
+cap = cv2.VideoCapture('../material/CV_basket.mp4')
 for i in range(1000):
     ret, frame = cap.read()
     # frame = frame[:,:,::-1]

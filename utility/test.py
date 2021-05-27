@@ -19,7 +19,7 @@ model.classes = [0] # filter for person
 # results.print()  # or .show(), .save()
 # results.save()
 
-cap = cv2.VideoCapture('CV-Assignment2/material/CV_basket.mp4')
+cap = cv2.VideoCapture('../material/CV_basket.mp4')
 frames = list()
 for i in range(1000):
     ret, frame = cap.read()
@@ -41,7 +41,7 @@ for i in range(1000):
     frame = frame[:,:,::-1]
     cv2.imshow('frame', frame)
 
-    k = cv2.waitKey(50)
+    k = cv2.waitKey(1)
     if k == ord('q'):
         break
     elif k == ord(' '):
