@@ -43,13 +43,24 @@ def track(frame, track_window, model):
     
     frame_masked, motion_mask = bg_subtraction.subtract(frame)
     best = [99999999, None, None]
+    conflict_predictions = list()
     for predictions in results.xyxy:
-        for xmin, ymin, xmax, ymax, confidence, cl in predictions:
+        for pred in predictions:
+            xmin, ymin, xmax, ymax, confidence, cl = pred
             center = ((xmax+xmin)/2, (ymax+ymin)/2)
             x1p, x2p, y1p, y2p = int(xmin), int(xmax), int(ymin), int(ymax)
 
             distance = dist2(track_center, center).item()
             
+            if distance < 40:
+                conflict_predictions.append(pred)
+
+            if distance < best[0]:
+                best[0] = d
+                best[1] = hist
+                best[2] = (x1p, y1p, x2p-x1p, y2p-y1p)
+
+
             img = frame[yw+y1p:yw+y2p, xw+x1p:xw+x2p]
             m = motion_mask[yw+y1p:yw+y2p, xw+x1p:xw+x2p]
             hist = cv2.calcHist([img], [0, 1, 2], m, [8, 8, 8],
@@ -62,10 +73,6 @@ def track(frame, track_window, model):
 
             d = distance + hist_distance*10
             print(f"distance {distance}, hist_distance {hist_distance}, weighted_sum {d}")
-            if best[0] > d:
-                best[0] = d
-                best[1] = hist
-                best[2] = (x1p, y1p, x2p-x1p, y2p-y1p)
 
 
     print(f"best distance: {best[0]}")
