@@ -5,10 +5,10 @@ import math
 import bg_subtraction
 
 def dist2(c1, c2):
-    return math.sqrt(((c1[0]-c2[0])**2 + (c1[1]-c2[1])**2).item())
+    return math.sqrt((c1[0]-c2[0])**2 + (c1[1]-c2[1])**2)
 
-# DEBUG = True
-DEBUG = False
+DEBUG = True
+# DEBUG = False
 FPS = 100 if DEBUG else 1
 
 WIDTH = 128
@@ -32,8 +32,9 @@ OPENCV_METHODS = {
 }
 
 target_hist = None
+last_detection = None
 def track(frame, track_window, model):
-    global target_hist
+    global target_hist, last_detection
 
     (xw, yw, ww, hw) = track_window
     frame_window = frame[yw:yw+hw, xw:xw+ww]
@@ -49,7 +50,7 @@ def track(frame, track_window, model):
     best = [99999999, None, None]
     for predictions in results.xyxy:
         for i, (xmin, ymin, xmax, ymax, confidence, cl) in enumerate(predictions):
-            center = ((xmax+xmin)/2, (ymax+ymin)/2)
+            center = (((xmax+xmin)/2).item(), ((ymax+ymin)/2).item())
             x1p, x2p, y1p, y2p = int(xmin), int(xmax), int(ymin), int(ymax)
 
             distance = dist2(track_center, center)
@@ -91,6 +92,7 @@ def track(frame, track_window, model):
         kalman.predict()
         # print("useless prediction", kalman.predict())
         target_hist = best[1]
+        last_detection = track_window
         predicted = False
     else:        
         current_pre = kalman.predict()
@@ -145,7 +147,13 @@ for i in range(1000):
         # track_center = (xw+ww//2, yw+hw//2)
 
     # elif i%5 == 0:
-    track_window, predicted = track(frame, track_window, model)    
+    track_window, predicted = track(frame, track_window, model)
+    # print(predicted)
+    # print(last_detection)
+    # if last_detection is not None: print(dist2(last_detection[:2], track_window[:2]))
+    if predicted and last_detection is not None and dist2(last_detection[:2], track_window[:2]) > 400:
+        print('target missed!!!!')
+        break
 
     (xw, yw, ww, hw) = track_window
     if not predicted:

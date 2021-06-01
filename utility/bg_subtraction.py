@@ -12,14 +12,20 @@ def get_box(mask_points):
     # w, h = 1220, 287
     return x_min, y_min, x_max-x_min, y_max-y_min
 
+def get_mask(mask_points, dim=None):
+    if dim is None:
+        dim = background.shape[:2]
+    x,y,w,h = get_box(mask_points)
+    mask_points = mask_points.reshape((-1,1,2))
+    mask = np.zeros(dim, np.uint8)
+    cv2.fillPoly(mask,[mask_points],255)
+    return mask
+
 root_dir = '..'
 background = cv2.imread(f'{root_dir}/material/background.png', cv2.IMREAD_GRAYSCALE)
 
 mask_points = np.array([(87, 660), (298, 708), (494, 732), (709, 740), (902, 728), (1114, 696), (1307, 646), (1243, 540), (1084, 458), (996, 531), (696, 539), (389, 534), (313, 453), (131, 542)], np.int32)
-x,y,w,h = get_box(mask_points)
-mask_points = mask_points.reshape((-1,1,2))
-mask = np.zeros(background.shape[:2], np.uint8)
-cv2.fillPoly(mask,[mask_points],255)
+mask = get_mask(mask_points)
 # mask = mask[y:y+h, x:x+w]
 
 # background = background[y:y+h, x:x+w]
