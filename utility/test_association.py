@@ -1,11 +1,15 @@
 import torch
 import cv2
 import numpy as np
+import math
 import bg_subtraction
 
 def dist2(c1, c2):
-    return (c1[0]-c2[0])**2 + (c1[1]-c2[1])**2
+    return math.sqrt(((c1[0]-c2[0])**2 + (c1[1]-c2[1])**2).item())
 
+# DEBUG = True
+DEBUG = False
+FPS = 100 if DEBUG else 1
 
 WIDTH = 128
 HEIGHT = 256
@@ -44,32 +48,43 @@ def track(frame, track_window, model):
     frame_masked, motion_mask = bg_subtraction.subtract(frame)
     best = [99999999, None, None]
     for predictions in results.xyxy:
-        for xmin, ymin, xmax, ymax, confidence, cl in predictions:
+        for i, (xmin, ymin, xmax, ymax, confidence, cl) in enumerate(predictions):
             center = ((xmax+xmin)/2, (ymax+ymin)/2)
             x1p, x2p, y1p, y2p = int(xmin), int(xmax), int(ymin), int(ymax)
 
-            distance = dist2(track_center, center).item()
+            distance = dist2(track_center, center)
+            if distance > 50:
+                if DEBUG: print(f'skip distance {distance}')
+                continue
             
             img = frame[yw+y1p:yw+y2p, xw+x1p:xw+x2p]
             m = motion_mask[yw+y1p:yw+y2p, xw+x1p:xw+x2p]
-            hist = cv2.calcHist([img], [0, 1, 2], m, [8, 8, 8],
-                [0, 256, 0, 256, 0, 256])
+            # cv2.imshow(f'prediction {i}', cv2.vconcat([img,m]))
+            cv2.imshow(f'prediction {i}', m)
+
+
+            hist = cv2.calcHist([img], [0, 1, 2], m, [8, 8, 8],[0, 256, 0, 256, 0, 256])
             hist = cv2.normalize(hist, hist).flatten()
             
             hist_distance = 0
             if target_hist is not None:
                 hist_distance = cv2.compareHist(hist, target_hist, OPENCV_METHODS['Hellinger'])
+                # print(f'prediction {i} - hist distance: {hist_distance}')
 
-            d = distance + hist_distance*10
-            print(f"distance {distance}, hist_distance {hist_distance}, weighted_sum {d}")
+            if hist_distance > 0.3:
+                if DEBUG: print('skip histogram')
+                continue
+
+            d = distance + hist_distance*100
+            # d = hist_distance
+            if DEBUG: print(f"prediction {i}:\tdistance {distance},\thist_distance {hist_distance},\tweighted_sum {d}")
             if best[0] > d:
                 best[0] = d
                 best[1] = hist
                 best[2] = (x1p, y1p, x2p-x1p, y2p-y1p)
 
 
-    print(f"best distance: {best[0]}")
-    if best[0] < 1000:
+    if best[0] < 100:
         track_window = trackWindow(best[2], origin=(xw, yw))
         # print("correction",np.array([[np.float32(track_window[0])],[np.float32(track_window[1])]]))
         kalman.correct(np.array([[np.float32(track_window[0])],[np.float32(track_window[1])]]))
@@ -84,6 +99,10 @@ def track(frame, track_window, model):
         track_window = (cpx, cpy, WIDTH, HEIGHT)
         predicted = True
     
+    if DEBUG:
+        print(track_window)
+        print(f"predicted {predicted}")
+        print('-----------------------------------------------------------------------')
     return track_window, predicted
 
 
@@ -99,7 +118,7 @@ model.classes = [0] # filter for person
 kalman = cv2.KalmanFilter(4,2)
 kalman.measurementMatrix = np.array([[1,0,0,0],[0,1,0,0]],np.float32)
 kalman.transitionMatrix = np.array([[1,0,1,0],[0,1,0,1],[0,0,1,0],[0,0,0,1]], np.float32)
-kalman.processNoiseCov = np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]], np.float32) * 0.03
+kalman.processNoiseCov = np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]], np.float32) * 0.3
 kalman.measurementNoiseCov = np.array([[1,0],[0,1]], np.float32) * 1
 
 # kalman.transitionMatrix = np.array([[1., 1.], [0., 1.]],np.float32)
@@ -126,9 +145,7 @@ for i in range(1000):
         # track_center = (xw+ww//2, yw+hw//2)
 
     # elif i%5 == 0:
-    track_window, predicted = track(frame, track_window, model)
-    print(track_window)
-    print(f"predicted {predicted}")
+    track_window, predicted = track(frame, track_window, model)    
 
     (xw, yw, ww, hw) = track_window
     if not predicted:
@@ -140,7 +157,7 @@ for i in range(1000):
     # frame = frame[:,:,::-1]
     cv2.imshow('frame', frame)
 
-    k = cv2.waitKey(1)
+    k = cv2.waitKey(FPS)
     if k == ord('q'):
         break
     elif k == ord(' '):

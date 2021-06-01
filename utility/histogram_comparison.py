@@ -31,6 +31,10 @@ def compare_histograms(images, masks=None):
     hists = list()
     for i, img in enumerate(images):
         mask = masks[i] if masks is not None else None
+        cv2.imshow(f'selection {i}', img)
+        if mask is not None:
+            cv2.imshow(f'mask {i}', mask)
+
         hist = cv2.calcHist([img], [0, 1, 2], mask, [8, 8, 8],
                 [0, 256, 0, 256, 0, 256])
         hist = cv2.normalize(hist, hist).flatten()
@@ -70,6 +74,8 @@ dilatation_size = 2
 element = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * dilatation_size + 1, 2 * dilatation_size + 1),
                                     (dilatation_size, dilatation_size))
 
+masks = list()
+images = list()
 cap = cv2.VideoCapture(f"{root_dir}/material/CV_basket.mp4")
 for i in range(1000):
     ret, frame = cap.read()
@@ -82,24 +88,27 @@ for i in range(1000):
     diff = cv2.absdiff(background, frame_gray)
     #mask thresholding
     ret2, motion_mask = cv2.threshold(diff,50,255,cv2.THRESH_BINARY)
-    motion_mask = cv2.dilate(motion_mask, element, iterations=1)
+    # motion_mask = cv2.dilate(motion_mask, element, iterations=1)
 
     frame_masked = cv2.bitwise_and(frame_cut, frame_cut, mask=motion_mask)
 
-    selections = list()
-    for i in range(3):
+    if i == 0:
         roi = cv2.selectROI('full_img', frame_cut, showCrosshair=False)
-        selections.append(roi)
-
-    masks = list()
-    images = list()
-    for i, roi in enumerate(selections):
-        x,y,w,h = roi
-        img = frame_cut[y:y+h, x:x+w]
-        m = motion_mask[y:y+h, x:x+w]
+        xr,yr,wr,hr = roi
+        img = frame_cut[yr:yr+hr, xr:xr+wr]
+        m = motion_mask[yr:yr+hr, xr:xr+wr]
         images.append(img)
         masks.append(m)
-        cv2.imshow(f'selection {i}', frame_masked[y:y+h, x:x+w])
+    else:
+        for j in range(2):
+            roi = cv2.selectROI('full_img', frame_cut, showCrosshair=False)
+            xr,yr,wr,hr = roi
+            img = frame_cut[yr:yr+hr, xr:xr+wr]
+            m = motion_mask[yr:yr+hr, xr:xr+wr]
+            images.append(img)
+            masks.append(m)
 
-    compare_histograms(images, masks)
-    cv2.waitKey(0)
+        break
+
+compare_histograms(images, masks)
+cv2.waitKey(0)

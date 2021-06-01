@@ -42,9 +42,9 @@ def track(frame, track_window, model):
     print(f"distance: {min_dist}")
     if min_dist < 1000:
         track_window = trackWindow((x1p, y1p, x2p-x1p, y2p-y1p), origin=(xw, yw))
-        print("correction",np.array([[np.float32(track_window[0])],[np.float32(track_window[1])]]))
+        # print("correction",np.array([[np.float32(track_window[0])],[np.float32(track_window[1])]]))
         kalman.correct(np.array([[np.float32(track_window[0])],[np.float32(track_window[1])]]))
-        print("useless prediction", kalman.predict())
+        kalman.predict()
         predicted = False
     else:        
         current_pre = kalman.predict()
@@ -63,6 +63,7 @@ device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 model = torch.hub.load('ultralytics/yolov5', 'yolov5s')
 # model = torch.hub.load('ultralytics/yolov5', 'yolov5x')
 model.classes = [0] # filter for person
+# model.to(device)
 
 
 kalman = cv2.KalmanFilter(4,2)
@@ -109,7 +110,7 @@ for i in range(1000):
     # frame = frame[:,:,::-1]
     cv2.imshow('frame', frame)
 
-    k = cv2.waitKey(40)
+    k = cv2.waitKey(1)
     if k == ord('q'):
         break
     elif k == ord(' '):
