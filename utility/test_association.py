@@ -141,6 +141,7 @@ for i in range(1000):
 
     if i == 0:
         roi = cv2.selectROI('frame', frame, showCrosshair=False)
+        print(roi)
         # x1, x2, y1, y2 = x, x+w, y, y+h
         # track_center = ((x2+x1)//2, (y2+y1)//2)
         track_window = trackWindow(roi)
