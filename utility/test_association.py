@@ -7,7 +7,7 @@ import bg_subtraction
 def dist2(c1, c2):
     return math.sqrt((c1[0]-c2[0])**2 + (c1[1]-c2[1])**2)
 
-DEBUG = True
+DEBUG = False
 # DEBUG = False
 FPS = 100 if DEBUG else 1
 

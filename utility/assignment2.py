@@ -7,18 +7,23 @@ import sys
 DEBUG = False
 DELAY = 100 if DEBUG else 1
 
+FPS = 25
+
 RED = (0,0,255)
 BLUE = (255,0,0)
 ORANGE = (0,165,255)
 VIOLET = (225,49,139)
 PURPLE = (245,71,201)
+WHITE = (255,255,255)
+BROWN = (33,67,101)
 
-WIDTH = 128
-HEIGHT = 256
+WIDTH = 32
+HEIGHT = 64
 
 RIGHT = 0
 LEFT = 1
 players_location = None
+last_possession_change = None
 
 
 def get_motion_mask(frame, background_gray, mask, dilatation_kernel):
@@ -60,15 +65,6 @@ def l2norm(p1, p2):
     return math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
 
 
-def trackWindow(window, width=128, height=256, origin=(0,0)):
-    # TODO: check not going out of borders
-    (xw, yw, ww, hw) = window
-    xc, yc = xw+ww//2, yw+hw//2
-    x = xc-width//2 + origin[0]
-    y = yc-height//2 + origin[1]
-    return (x,y,width,height)
-
-
 target_hist = None
 last_detection = None
 def track(frame, motion_mask, track_window, predictions, kalman):
@@ -107,9 +103,9 @@ def track(frame, motion_mask, track_window, predictions, kalman):
 
     pred_distance, pred_hist, pred_window = best_prediction
     if pred_distance < 100:
-        # track_window = trackWindow(pred_window, width=WIDTH, height=HEIGHT)
         track_window = pred_window
-        kalman.correct(np.array([[np.float32(track_window[0])],[np.float32(track_window[1])]]))
+        centerx, centery = pred_window[0]+pred_window[2]/2, pred_window[1]+pred_window[3]/2
+        kalman.correct(np.array([[np.float32(centerx)],[np.float32(centery)]]))
         kalman.predict()
         target_hist = pred_hist
         last_detection = track_window
@@ -117,7 +113,7 @@ def track(frame, motion_mask, track_window, predictions, kalman):
     else:        
         current_pre = kalman.predict()
         cpx, cpy = current_pre[0].astype(int).item(), current_pre[1].astype(int).item()
-        track_window = (cpx, cpy, WIDTH, HEIGHT)
+        track_window = (cpx-WIDTH//2, cpy-HEIGHT//2, WIDTH, HEIGHT) # TODO: get last average width and height and check not going out of borders
         predicted = True
     
     if DEBUG:
@@ -128,6 +124,19 @@ def track(frame, motion_mask, track_window, predictions, kalman):
     return track_window, predicted
 
 
+def draw_trajectory(frame, tracking_points):
+    px, py = tracking_points[0][:2]
+    for i in range(len(tracking_points)):
+        cx, cy, predicted = tracking_points[i]
+        
+        if not predicted:
+            cv2.line(frame, (px, py),(cx, cy), BROWN, 2)
+        else:
+            cv2.line(frame, (px, py),(cx, cy), PURPLE, 3)
+
+        px, py = cx, cy
+    
+    return frame
 
 background_gray = cv2.imread(f'../material/background.png', cv2.IMREAD_GRAYSCALE)
 
@@ -161,13 +170,20 @@ ret, frame = cap.read()
 if ret == False:
     sys.exit(1)
 
-roi = cv2.selectROI('frame', frame, showCrosshair=False)
-# track_window = trackWindow(roi, width=WIDTH, height=HEIGHT)
-track_window = roi
+out = cv2.VideoWriter('output.avi',cv2.VideoWriter_fourcc('M','J','P','G'), FPS, (1422,1080))
 
+track_window = cv2.selectROI('frame', frame, showCrosshair=False)
+cx, cy, cw, ch = track_window
+tracking_points = [(cx+cw//2, cy+ch//2, False)]
+
+avg_right, avg_left = 5, 5
+alpha = 0.8
+frame_index = 0
+last_detection_frame = None
 while cap.isOpened() and ret:    
     # import random
     # if random.randint(0,10) != 0:
+    #     ret, frame = cap.read()
     #     continue
 
     motion_mask = get_motion_mask(frame, background_gray, mask1, dilatation_kernel=element)
@@ -175,23 +191,26 @@ while cap.isOpened() and ret:
     with torch.no_grad():
         frame = frame[:,:,::-1]
         results = detector(frame)
+        # for iiimg in results.render():
+        #     cv2.imshow('render', iiimg)
         frame = frame[:,:,::-1]
 
     valid_predictions, bad_predictions = filter_predictions(results.xyxy, mask2) # TODO: try change mask
 
     if track_window is not None: # check if tracking should continue
         track_window, predicted = track(frame, motion_mask, track_window, valid_predictions+bad_predictions, kalman) # TODO: try with only valid_predictions
-        if predicted and last_detection is not None and l2norm(last_detection[:2], track_window[:2]) > 400:
+        
+        cx, cy, cw, ch = track_window
+        tracking_points.append((cx+cw//2, cy+ch//2, predicted))        
+
+        if not predicted:
+            last_detection_frame = frame_index
+        
+        if predicted and last_detection is not None and (l2norm(last_detection[:2], track_window[:2]) > 200 or frame_index-last_detection_frame > 10):
             print('target missed!!!!')
             track_window = None
 
-        (xw, yw, ww, hw) = track_window
-        if not predicted:
-            cv2.rectangle(frame, (xw, yw), (xw+ww, yw+hw), ORANGE, 3)
-        else:
-            cv2.rectangle(frame, (xw, yw), (xw+ww, yw+hw), VIOLET, 3)
-
-
+    frame = draw_trajectory(frame, tracking_points)
 
     left_counter = 0
     right_counter = 0
@@ -202,18 +221,38 @@ while cap.isOpened() and ret:
         else:
             right_counter += 1
             
+    avg_left = alpha*avg_left + (1-alpha)*left_counter
+    avg_right = alpha*avg_right + (1-alpha)*right_counter
+    # print(f"avg_left {avg_left}")
+    # print(f"avg right {avg_right}")
+
     for xmin, ymin, xmax, ymax, confidence, cl in bad_predictions:
         frame = cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), BLUE, 2)
-    
-    
-    cv2.imshow('frame', frame)
 
-    if right_counter == 0 and players_location != LEFT:
+    if track_window is not None:
+        (xw, yw, ww, hw) = track_window
+        if not predicted:
+            cv2.rectangle(frame, (xw, yw), (xw+ww, yw+hw), BROWN, 3)
+        else:
+            cv2.rectangle(frame, (xw, yw), (xw+ww, yw+hw), PURPLE, 3)
+    
+    cv2.putText(frame, f'people: {len(valid_predictions)+len(bad_predictions)} (total), {len(valid_predictions)} (court)', 
+        (20,40), cv2.FONT_HERSHEY_SIMPLEX, 1, WHITE, 1, cv2.LINE_AA)
+    if last_possession_change is not None and frame_index - last_possession_change < FPS*3:
+        cv2.putText(frame, f'possession change to {"right" if players_location==RIGHT else "left"}',
+            (20,80), cv2.FONT_HERSHEY_SIMPLEX, 1, WHITE, 1, cv2.LINE_AA)
+
+    cv2.imshow('frame', frame)
+    out.write(frame)
+
+    if players_location != LEFT and avg_right < 0.1: #right_counter == 0 and 
         players_location = LEFT
+        last_possession_change = frame_index
         print('change possession to left')
 
-    if left_counter == 0 and players_location != RIGHT:
+    if players_location != RIGHT and avg_left < 0.1: # left_counter == 0 and 
         players_location = RIGHT
+        last_possession_change = frame_index
         print('change possession to right')
 
 
@@ -225,6 +264,8 @@ while cap.isOpened() and ret:
             continue
 
     ret, frame = cap.read()
+    frame_index += 1
 
 cap.release()
+out.release()
 cv2.destroyAllWindows()

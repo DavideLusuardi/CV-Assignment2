@@ -37,9 +37,9 @@ while cap.isOpened():
     # frame = cv2.resize(frame, (1280, 720))
     # frame = cv2.resize(frame, (1080, 810))
 
-    i += 1
-    if i % 10 != 0:
-        continue
+    # i += 1
+    # if i % 10 != 0:
+    #     continue
     with torch.no_grad():
         results = model(frame)
     # for i, img in enumerate(results.render()):
