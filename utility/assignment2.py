@@ -4,10 +4,12 @@ import math
 import torch
 import sys
 
-DEBUG = False
+DEBUG = True
 DELAY = 100 if DEBUG else 1
+DELAY = 1
 
 FPS = 25
+RESOLUTION = (1422,1080)
 
 RED = (0,0,255)
 BLUE = (255,0,0)
@@ -19,6 +21,9 @@ BROWN = (33,67,101)
 
 WIDTH = 32
 HEIGHT = 64
+
+MAX_FRAMES_NOT_DETECT = 40
+MAX_DISTANCE_NOT_DETECT = 200
 
 RIGHT = 0
 LEFT = 1
@@ -77,7 +82,7 @@ def track(frame, motion_mask, track_window, predictions, kalman):
     for i, (x1p, y1p, x2p, y2p, confidence, cl) in enumerate(predictions):
         prediction_center = ((x2p+x1p)/2, (y2p+y1p)/2)
         euclidean_distance = l2norm(track_center, prediction_center)
-        if euclidean_distance > 50:
+        if euclidean_distance > 20+50*np.tanh(frame_index-last_detection_frame-1): # prima 50
             if DEBUG: print(f'skip due to distance {euclidean_distance}')
             continue
         
@@ -90,11 +95,11 @@ def track(frame, motion_mask, track_window, predictions, kalman):
         if target_hist is not None:
             hist_distance = cv2.compareHist(hist, target_hist, cv2.HISTCMP_BHATTACHARYYA)
 
-        if hist_distance > 0.3:
-            if DEBUG: print('skip due to histogram')
+        if hist_distance > 0.3+0.2*np.tanh(frame_index-last_detection_frame-1): # prima 03
+            if DEBUG: print(f'skip due to histogram {hist_distance}')
             continue
 
-        distance = euclidean_distance + hist_distance*100
+        distance = euclidean_distance + hist_distance*200
         if DEBUG: print(f"prediction {i}:\tdistance {euclidean_distance},\thist_distance {hist_distance},\tweighted_sum {distance}")
         if best_prediction[0] > distance:
             best_prediction[0] = distance
@@ -102,7 +107,7 @@ def track(frame, motion_mask, track_window, predictions, kalman):
             best_prediction[2] = (x1p, y1p, x2p-x1p, y2p-y1p)
 
     pred_distance, pred_hist, pred_window = best_prediction
-    if pred_distance < 100:
+    if pred_distance < 40+80*np.tanh(frame_index-last_detection_frame-1): # prima 100
         track_window = pred_window
         centerx, centery = pred_window[0]+pred_window[2]/2, pred_window[1]+pred_window[3]/2
         kalman.correct(np.array([[np.float32(centerx)],[np.float32(centery)]]))
@@ -130,7 +135,7 @@ def draw_trajectory(frame, tracking_points):
         cx, cy, predicted = tracking_points[i]
         
         if not predicted:
-            cv2.line(frame, (px, py),(cx, cy), BROWN, 2)
+            cv2.line(frame, (px, py),(cx, cy), BROWN, 3)
         else:
             cv2.line(frame, (px, py),(cx, cy), PURPLE, 3)
 
@@ -170,7 +175,7 @@ ret, frame = cap.read()
 if ret == False:
     sys.exit(1)
 
-out = cv2.VideoWriter('output.avi',cv2.VideoWriter_fourcc('M','J','P','G'), FPS, (1422,1080))
+out = cv2.VideoWriter('output.avi',cv2.VideoWriter_fourcc('M','J','P','G'), FPS, RESOLUTION)
 
 track_window = cv2.selectROI('frame', frame, showCrosshair=False)
 cx, cy, cw, ch = track_window
@@ -179,7 +184,7 @@ tracking_points = [(cx+cw//2, cy+ch//2, False)]
 avg_right, avg_left = 5, 5
 alpha = 0.8
 frame_index = 0
-last_detection_frame = None
+last_detection_frame = -1
 while cap.isOpened() and ret:    
     # import random
     # if random.randint(0,10) != 0:
@@ -191,8 +196,6 @@ while cap.isOpened() and ret:
     with torch.no_grad():
         frame = frame[:,:,::-1]
         results = detector(frame)
-        # for iiimg in results.render():
-        #     cv2.imshow('render', iiimg)
         frame = frame[:,:,::-1]
 
     valid_predictions, bad_predictions = filter_predictions(results.xyxy, mask2) # TODO: try change mask
@@ -206,7 +209,9 @@ while cap.isOpened() and ret:
         if not predicted:
             last_detection_frame = frame_index
         
-        if predicted and last_detection is not None and (l2norm(last_detection[:2], track_window[:2]) > 200 or frame_index-last_detection_frame > 10):
+        if predicted and last_detection is not None and \
+                (l2norm(last_detection[:2], track_window[:2]) > MAX_DISTANCE_NOT_DETECT or 
+                frame_index-last_detection_frame > MAX_FRAMES_NOT_DETECT):
             print('target missed!!!!')
             track_window = None
 
