@@ -2,3 +2,5 @@ material/CV_basket.mp4
 material/Video.mp4
 utility/yolo/yolov3.weights
 __pycache__
+output.avi
+output_best.avi
