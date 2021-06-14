@@ -34,7 +34,7 @@ players_location = None
 
 
 def get_motion_mask(frame, background_gray, mask, dilatation_kernel):
-    ''' Calculate the motion mask applying background subtraction.
+    ''' Calculate the motion mask applying background subtraction between the frame and the background_gray.
     The background image has been obtained merging respectively the left and the right part
     of two different frames representing the court without people.
     '''
@@ -69,7 +69,7 @@ def filter_predictions(predictions, court_mask):
     for image_predictions in predictions:
         for xmin, ymin, xmax, ymax, confidence, cl in image_predictions:
             xmin, ymin, xmax, ymax, confidence, cl = int(xmin.cpu()), int(ymin.cpu()), int(xmax.cpu()), int(ymax.cpu()), float(confidence.cpu()), float(cl.cpu())
-            # check if the center of the predicted window is white in the court mask
+            # check if the center of the predicted window is in the court mask (has value 255)
             if court_mask[(ymin+ymax)//2][(xmin+xmax)//2] == 255:
                 valid_predictions.append((xmin, ymin, xmax, ymax, confidence, cl))
             else:
@@ -91,7 +91,7 @@ def track(frame, motion_mask, track_window, predictions, kalman):
     ''' Perform the tracking of the person. Knowing the previous track_window, the function 
     calculates the new window: consider the best prediction as the one that has the lower weighted
     sum of its Euclidean and histogram distance from the previous track_window. When that sum is
-    lower than a dynamic threshold the prediction is considered valid otherwise it is estimated by
+    lower than a dynamic threshold, the prediction is considered valid otherwise it is estimated by
     a Kalman filter.
     '''
     global target_hist, last_detection
@@ -106,7 +106,7 @@ def track(frame, motion_mask, track_window, predictions, kalman):
         # calculate the Euclidean distance between the track_window center and the prediction center
         euclidean_distance = l2norm(track_center, prediction_center)
         # discard the prediction if the distance is greater than the dynamic threshold calculated 
-        # wrt the last frame in which the track_window corresponds to a prediction (i.e. it has been 
+        # wrt. the last frame in which the track_window was equal to a prediction of Yolo (i.e. it has been 
         # not estimated by the Kalman filter)
         if euclidean_distance > 20+50*np.tanh(frame_index-last_detection_frame-1):
             if DEBUG: print(f'discard due to distance {euclidean_distance}')
@@ -202,18 +202,19 @@ def put_text(frame, valid_predictions, bad_predictions, players_location, posses
 # representing the court without people
 background_gray = cv2.imread(f'../material/background.png', cv2.IMREAD_GRAYSCALE)
 
+# define two different court mask
 mask_points1 = np.array([(87, 660), (298, 708), (494, 732), (709, 740), (902, 728), (1114, 696), (1307, 646), (1243, 540), (1084, 458), (996, 531), (696, 539), (389, 534), (313, 453), (131, 542)], np.int32)
-mask1 = get_mask_from_points(mask_points1, dim=background_gray.shape[:2])
+court_mask1 = get_mask_from_points(mask_points1, dim=background_gray.shape[:2])
 
-background_gray = cv2.bitwise_and(background_gray, background_gray, mask=mask1)
+mask_points2 = np.array([(56, 641), (323, 548), (511, 557), (696, 561), (901, 554), (1063, 543), (1353, 630), (1089, 700), (708, 739), (368, 715), (89, 661), (49, 644)], np.int32)
+court_mask2 = get_mask_from_points(mask_points2, dim=background_gray.shape[:2])
 
+background_gray = cv2.bitwise_and(background_gray, background_gray, mask=court_mask1)
+
+# define dilatation kernel
 dilatation_size = 2
 element = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * dilatation_size + 1, 2 * dilatation_size + 1),
                                     (dilatation_size, dilatation_size))
-
-mask_points2 = np.array([(56, 641), (323, 548), (511, 557), (696, 561), (901, 554), (1063, 543), (1353, 630), (1089, 700), (708, 739), (368, 715), (89, 661), (49, 644)], np.int32)
-mask2 = get_mask_from_points(mask_points2, dim=background_gray.shape[:2])
-mask2 = mask1 # TODO: tenere??
 
 # load the yolo v5 detector
 detector = torch.hub.load('ultralytics/yolov5', 'yolov5s')
@@ -237,6 +238,7 @@ if ret == False:
 out = cv2.VideoWriter('output.avi',cv2.VideoWriter_fourcc('M','J','P','G'), FPS, RESOLUTION)
 
 # initialize the track window considering the user selection
+print("select the person to track and press ENTER")
 track_window = cv2.selectROI('frame', frame, showCrosshair=False)
 cx, cy, cw, ch = track_window
 tracking_points = [(cx+cw//2, cy+ch//2, False)]
@@ -249,16 +251,16 @@ frame_index = 0
 last_detection_frame = -1
 while cap.isOpened() and ret:
     # calculate the motion mask for this frame
-    motion_mask = get_motion_mask(frame, background_gray, mask1, dilatation_kernel=element)
+    motion_mask = get_motion_mask(frame, background_gray, court_mask1, dilatation_kernel=element)
 
     # apply yolo to get the predictions
     with torch.no_grad():
-        frame = frame[:,:,::-1] # invert BGR to RGB
+        frame = frame[:,:,::-1] # invert color channels BGR to RGB
         results = detector(frame)
         frame = frame[:,:,::-1]
 
-    # split the predictions in valid and bad ones
-    valid_predictions, bad_predictions = filter_predictions(results.xyxy, mask2)
+    # split the predictions in valid and bad predictions
+    valid_predictions, bad_predictions = filter_predictions(results.xyxy, court_mask2)
 
     # check if tracking should continue (target not lost)
     if track_window is not None:
@@ -293,14 +295,15 @@ while cap.isOpened() and ret:
             right_counter += 1
             
     # update estimation of number of people in the left and right half-court
-    avg_left = 0.8*avg_left + (1-0.8)*left_counter
-    avg_right = 0.8*avg_right + (1-0.8)*right_counter
+    alpha = 0.8
+    avg_left = alpha*avg_left + (1-alpha)*left_counter
+    avg_right = alpha*avg_right + (1-alpha)*right_counter
 
     for xmin, ymin, xmax, ymax, confidence, cl in bad_predictions:
         # draw the player bounding box
         frame = cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), BLUE, 2)
 
-    # draw the track window
+    # draw the track_window
     if track_window is not None:
         (xw, yw, ww, hw) = track_window
         if not predicted:
