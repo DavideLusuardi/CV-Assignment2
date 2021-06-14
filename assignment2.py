@@ -200,7 +200,7 @@ def put_text(frame, valid_predictions, bad_predictions, players_location, posses
 
 # load in grayscale the background image obtained merging the left and the right part of two frames 
 # representing the court without people
-background_gray = cv2.imread(f'../material/background.png', cv2.IMREAD_GRAYSCALE)
+background_gray = cv2.imread(f'background.png', cv2.IMREAD_GRAYSCALE)
 
 # define two different court mask
 mask_points1 = np.array([(87, 660), (298, 708), (494, 732), (709, 740), (902, 728), (1114, 696), (1307, 646), (1243, 540), (1084, 458), (996, 531), (696, 539), (389, 534), (313, 453), (131, 542)], np.int32)
@@ -229,7 +229,7 @@ kalman.measurementNoiseCov = np.array([[1,0],[0,1]], np.float32) * 1
 
 
 # open the video
-cap = cv2.VideoCapture('../material/CV_basket.mp4')
+cap = cv2.VideoCapture('CV_basket.mp4')
 ret, frame = cap.read()
 if ret == False:
     sys.exit(1)
@@ -238,7 +238,7 @@ if ret == False:
 out = cv2.VideoWriter('output.avi',cv2.VideoWriter_fourcc('M','J','P','G'), FPS, RESOLUTION)
 
 # initialize the track window considering the user selection
-print("select the person to track and press ENTER")
+print("select the person to track")
 track_window = cv2.selectROI('frame', frame, showCrosshair=False)
 cx, cy, cw, ch = track_window
 tracking_points = [(cx+cw//2, cy+ch//2, False)]

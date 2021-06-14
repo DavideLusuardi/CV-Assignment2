@@ -64,4 +64,4 @@ avg_left = alpha*avg_left + (1-alpha)*left_counter
 where `alpha = 0.8` and `left_counter` is the number of valid predictions in the left half-court (initially `5`).
 The right half-court estimation has the same form.
 
-The ball possession changes when the players are all in one half of the court and previously they were in the opposite half.
+The ball possession changes when all the players are in one half of the court and previously they were all in the opposite one.
